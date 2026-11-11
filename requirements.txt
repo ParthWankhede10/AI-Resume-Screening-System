@@ -4,3 +4,5 @@ pymupdf
 scikit-learn
 pandas
 pytest
+
+boto3

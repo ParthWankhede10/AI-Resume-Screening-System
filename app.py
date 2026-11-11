@@ -7,6 +7,7 @@ import streamlit as st
 
 from matcher import DEFAULT_SKILLS, rank_resumes
 from resume_parser import extract_text_from_pdf
+from aws_storage import new_run_id, save_results, save_resumes
 
 st.set_page_config(page_title="AI Resume Screening System", page_icon="📄", layout="wide")
 st.title("AI Resume Screening System")
@@ -55,6 +56,9 @@ if st.button("Screen resumes", type="primary", use_container_width=True):
         for file_error in file_errors:
             st.warning(file_error)
 
+        run_id = new_run_id()
+        stored_files, storage_error = save_resumes(run_id, uploaded_files)
+
         if not resume_texts:
             st.error("No readable resumes were found. Upload PDFs that contain selectable text.")
         else:
@@ -83,6 +87,14 @@ if st.button("Screen resumes", type="primary", use_container_width=True):
                 for result in results
             ]
             results_frame = pd.DataFrame(table_rows)
+            saved_rows, db_error = save_results(run_id, results)
+            if storage_error or db_error:
+                st.warning(f"AWS storage problem: {storage_error or db_error}")
+            elif stored_files or saved_rows:
+                st.caption(
+                    f"Saved {stored_files} PDF(s) to S3 and {saved_rows} result(s) "
+                    f"to DynamoDB (run {run_id})."
+                )
             st.subheader("Ranked results")
             st.dataframe(results_frame, use_container_width=True, hide_index=True)
             csv_data = results_frame.to_csv(index=False).encode("utf-8-sig")
