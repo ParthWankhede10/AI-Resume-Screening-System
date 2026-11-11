@@ -1,70 +1,81 @@
 # AI Resume Screening System
 
-A small local Streamlit application that compares PDF resume text with a recruiter-provided job description. It uses TF-IDF cosine similarity and a transparent coverage score over skills listed in an editable dictionary. It does not use a trained deep-learning model or an external generative AI service.
+A Streamlit web app that ranks PDF resumes against a job description and shows the matched and missing skills for each resume. It runs on AWS EC2 and saves uploaded PDFs to Amazon S3 and scored results to Amazon DynamoDB.
+
+> Screening scores are estimates, not measures of a candidate's potential. Do not use them as the sole basis for hiring decisions. The tool does not infer or score age, gender, religion, caste, disability, photographs or other sensitive personal attributes.
+
+## Team
+
+| Name | Roll No. |
+|---|---|
+| Parth Wankhede | 58 |
+| Shashwat Deshpande | 64 |
+| Soumya Dhole | 65 |
+| Trigun Jagal | 66 |
 
 ## Features
 
-- Paste a job description and upload multiple PDF resumes.
-- Extract selectable text from PDFs; unreadable, scanned, and empty files are reported individually.
-- Edit the skills dictionary before screening.
-- View TF-IDF similarity, skills coverage, combined score, matched skills, and missing skills.
-- Adjust the relative weighting of text similarity and skills coverage; the two weights always total 100%.
-- Rank candidates and download the result table as CSV.
-- The tool does not infer or penalize candidates based on age, gender, religion, caste, disability, photographs, or other sensitive personal attributes.
+- Paste a job description and upload one or more PDF resumes
+- TF-IDF text similarity between each resume and the job description
+- Skills coverage from an editable skill dictionary, with matched and missing skills listed
+- Adjustable score weights (default 60% TF-IDF, 40% skills; always total 100%)
+- Ranked results table with CSV download
+- Each run saves PDFs to S3 (`resumes/<run_id>/`) and result rows to DynamoDB
 
-## Setup
+## How the score works
 
-From the project directory in PowerShell, create and activate a virtual environment, then install the dependencies:
+`overall = w * TF-IDF similarity + (1 - w) * skills coverage`, with `w = 0.60` by default.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+Example from a live run: 0.60 x 37.21 + 0.40 x 29.41 = 34.09.
+
+## Architecture
+
+```
+User browser (port 8501)
+        |
+        v
+EC2 t3.micro (ap-south-1)  --  Streamlit app.py + matcher.py
+        |  (IAM role attached to the instance)
+        +--> Amazon S3        PDFs saved per run
+        +--> Amazon DynamoDB  table ScreeningResults (partition key run_id, sort key filename)
 ```
 
-If PowerShell blocks activation, use `.venv\Scripts\python.exe` in place of `python` in the commands below.
+Security group: SSH (22) and Streamlit (8501).
 
-## Run
+## Project files
 
-```powershell
-python -m streamlit run app.py
+| File | Purpose |
+|---|---|
+| `app.py` | Streamlit interface, S3 and DynamoDB saving |
+| `matcher.py` | Text extraction, TF-IDF similarity and skill matching |
+| `requirements.txt` | Python dependencies |
+| `docs/` | Project presentation (PDF) |
+
+## Run locally
+
+```bash
+git clone https://github.com/ParthWankhede10/AI-Resume-Screening-System.git
+cd AI-Resume-Screening-System
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+streamlit run app.py
 ```
 
-Streamlit prints a local URL (usually `http://localhost:8501`) to open in a browser.
+Saving to S3 and DynamoDB needs AWS credentials with access to your own bucket and table. Check `app.py` for the bucket and table names and change them to yours.
 
-## Screenshots
+## Deploy on AWS
 
-![App overview](screenshots/app-overview.png)
+1. Create an S3 bucket and a DynamoDB table (`ScreeningResults`, partition key `run_id`, sort key `filename`) in the same region.
+2. Create an IAM role for EC2 with access to that bucket and table, and attach it to the instance.
+3. Launch an EC2 instance with a security group that allows ports 22 and 8501.
+4. Connect over SSH, clone this repository and install `requirements.txt`.
+5. Start the app: `streamlit run app.py --server.port 8501 --server.address 0.0.0.0`
+6. Open `http://<ec2-public-ip>:8501`.
 
-The app lets you paste a job description and upload one or more PDF resumes for screening. It extracts selectable text from each PDF and flags files that are unreadable, scanned, or empty.
+## Future work
 
-![Screening results](screenshots/screening-results.png)
-
-Resume text is compared with the job description using TF-IDF similarity and a skills dictionary. The tool evaluates matched and missing skills, calculates a combined score, and ranks candidates by overall score.
-
-![Export results](screenshots/export-results.png)
-
-After screening, the ranked results can be downloaded as a CSV file for sharing or further review.
-
-## Tests
-
-```powershell
-python -m pytest
-```
-
-## Methodology
-
-1. PyMuPDF extracts selectable text from each uploaded PDF. Files with no readable text are skipped with a per-file warning.
-2. Scikit-learn converts the job description and resume text into TF-IDF vectors and calculates cosine similarity. The value is displayed as a percentage from 0 to 100.
-3. The app finds dictionary-listed skills in the job description and each resume using case-insensitive whole-phrase matching. Skills coverage is `matched job-description skills / detected job-description skills * 100`. If no dictionary skill appears in the job description, coverage is 0% and the app warns the recruiter.
-4. Overall score is `similarity * similarity weight + skills coverage * skills weight`. Weights are chosen in the UI and sum to 100%.
-5. Candidates are sorted by overall score descending. Scores are estimates and can reflect wording, formatting, and dictionary limitations; they are not a hiring recommendation.
-
-## Limitations and responsible use
-
-The application performs text comparison, not a validated assessment of qualifications or job performance. It may miss synonyms, context, skills expressed in unusual formats, and information contained only in images or scanned pages. Review source resumes and use structured, job-related human evaluation. Never use the score as the sole basis for hiring, and do not use sensitive personal attributes in screening decisions.
-
-## Sample testing
-
-See [sample_data/README.md](sample_data/README.md) for instructions to create fictional local test resumes without committing personal data. Tests exercise matching and ranking without requiring any actual candidate data or PDF files.
+- AWS Lambda to validate uploads
+- CloudWatch logs and alarms
+- HTTPS with a domain name
+- OCR for scanned PDFs and semantic matching

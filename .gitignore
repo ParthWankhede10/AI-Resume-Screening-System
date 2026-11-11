@@ -1,22 +1,16 @@
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.streamlit/secrets.toml
-*.log
-outputs/
-resume_screening_results.csv
+# secrets - never commit these
+*.pem
+*.key
+.env
+.aws/
+credentials
 
-# Local resumes and candidate documents; never commit personal information.
-*.pdf
-*.doc
-*.docx
-*.rtf
-*.odt
-uploads/
-data/
-test_data/
-tests/generated/
-sample_data/*
-!sample_data/README.md
+# python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# misc
+.DS_Store
+.streamlit/secrets.toml
